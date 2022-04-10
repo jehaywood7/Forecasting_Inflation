@@ -17,13 +17,11 @@ rm(list = ls())
 graphics.off()
 knitr::opts_chunk$set(echo = TRUE)
 ```
-<br/><br/>
+<br/>
 
 ## Introduction
 
 In this paper, I will be creating several forecasts for inflation and comparing them to see which variables are the best predictors. I have included my code so that my results can be replicated and tested.
-
-<br/>
 
 The models will be tested against the Philips curve specification; a model developed in 1958 which explains the inverse relationship between the unemployment rate and inflation. My "challenge" is to create a model which predicts inflation better than a model using the unemployment rate alone.
 
@@ -46,8 +44,6 @@ require(ggplot2)
 require(reshape2)
 require(fpp3)
 ```
-
-<br/>
 
 ## Data and Expectations
 
