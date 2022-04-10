@@ -1,0 +1,231 @@
+---
+title: "Forecasting Inflation"
+author: "Jonathan Haywood"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: 
+  html_document:
+    df_print: paged
+    code_folding: "hide"
+    toc: yes
+    fig_caption: no
+    theme: cerulean
+    toc_float: no
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+graphics.off()
+knitr::opts_chunk$set(echo = TRUE)
+```
+<br/><br/>
+
+## Introduction
+
+In this paper, I will be creating several forecasts for inflation and comparing them to see which variables are the best predictors. I have included my code so that my results can be replicated and tested.
+
+<br/>
+
+The models will be tested against the Philips curve specification; a model developed in 1958 which explains the inverse relationship between the unemployment rate and inflation. My "challenge" is to create a model which predicts inflation better than a model using the unemployment rate alone.
+
+<br/>
+
+## Required R Libraries
+
+```{r loadLibraries, message = FALSE, warning= FALSE}
+require(tidyverse)
+require(kableExtra)
+require(tidyquant)
+require(lubridate)
+require(timetk)
+require(tsibble)
+require(ggplot2)
+require(reshape2)
+require(fpp3)
+```
+
+<br/>
+
+## Data and Expectations
+
+For creating the forecasts, I used monthly data obtained from the Federal Reserve Economic Data (FRED) from January 1982 up to December 2018. The models will then be tested over data from January 2019 to the most recent observation.
+
+**Variables:**
+
+<br/>
+
+<dl>
+  <dt>PCEPI</dt>
+  <dd>- Personal Consumption Expenditures: Chain-type Price Index -  a measure of the prices that people living in the United States pay for goods and services; used for obtaining the inflation rate.</dd>
+  <dt>UNRATE</dt>
+  <dd>- Unemployment Rate - number of unemployed as a percentage of the labor force; used for creating the Philips curve specification.</dd>
+  <dt>EXPINF1YR</dt>
+  <dd>- 1-Year Expected Inflation - the expected rate of inflation estimated by the Federal Reserve Bank of Cleveland</dd>
+  <dd>- This variable is estimated using a variety of economic factors such as: treasury yields, inflation data, inflation swaps, and survey-based measures of inflation expectations. So I expect this to be an excellent predictor of inflation in the economy.</dd>
+  <dt>MICH</dt>
+  <dd>- University of Michigan: Inflation Expectation - a survey of consumers of the median expected price change next in the next 12 months done by the University of Michigan.</dd>
+  <dd>- This variable functions as a judgmental forecast for inflation. While this should be a somewhat accurate predictor, it will likely be worse than EXPINF1YR because consumers often have a poor understanding of how inflation changes occur. This can be seen in the NYT article "Ordinary People Don’t Think Like Economists. It’s a Problem" which showed that many consumers don't understand the basic relationship between the interest rate and inflation.</dd>
+  <dt>HOUST</dt>
+  <dd>- New Privately-Owned Housing Units Started: Total Units - new residential construction projects that begin during a certain month.</dd>
+  <dd>- The number of housing starts serve as an important economic indicator as it shows the quantity of homes being built so as it increases, we would expect the economy to improve as well.</dd>
+</dl>
+
+<br/>
+
+
+
+```{r getData, message = FALSE}
+VarList <- c("PCEPI", "UNRATE", "EXPINF1YR", "MICH","HOUST")
+infl <- tq_get(VarList, get = "economic.data", from = "1982-01-01") %>%
+  mutate(Month = yearmonth(date), value = price) %>%
+  select(-c(date, price)) %>%
+  as_tsibble(index = Month, key = symbol)
+
+  inflw <- infl %>%
+  pivot_wider(names_from = symbol, values_from = value) %>% 
+  drop_na()
+
+inflLag <- inflw %>% select(c(PCEPI, HOUST, UNRATE, EXPINF1YR, MICH)) %>%
+  mutate(infl = 1200*log(PCEPI/lag(PCEPI))) %>% 
+  mutate(dinfl = infl - lag(infl,1)) %>% 
+  mutate(dinfl12 = 100*log(PCEPI/lag(PCEPI,12)) - lag(infl,12)) %>% 
+  mutate(unrate = UNRATE - lag(UNRATE)) %>% 
+  mutate(houst = 100*log(HOUST/lag(HOUST))) %>%
+  mutate(expinf1yr = EXPINF1YR - lag(EXPINF1YR)) %>%
+  mutate(mich = MICH - lag(MICH)) %>%
+  select(-c(PCEPI, UNRATE, HOUST, EXPINF1YR, MICH)) %>%
+  drop_na()
+
+train_data <- inflLag %>% filter_index(~ "2018-12")
+test_data <- inflLag %>% filter_index("2019-01" ~ .)
+```
+
+```{r checkData, include = FALSE}
+inflLagm <- melt(inflLag, "Month")
+ggplot(inflLagm, aes(Month, value)) + 
+  geom_line() +
+  facet_wrap(~variable, scales = "free", ncol = 2)
+```
+
+
+## Modelling
+
+<br/>
+
+The specification for the Philips curve is:
+
+$$\pi^{12}_t - \pi_{t-12} = \phi + \beta(B)\Delta \pi_{t-12} + \gamma(B) u_{t-12} + \varepsilon_t$$
+so I will estimate a model with 12 lags on unemployment rate and inflation.
+
+```{r m1, include = FALSE}
+m1 <- train_data %>% model(
+  m1 = TSLM(dinfl12 ~ 1 +
+                lag(dinfl,12) + lag(dinfl,13) + lag(dinfl,14) +
+                lag(dinfl,15) + lag(dinfl,16) + lag(dinfl,17) +
+                lag(dinfl,18) + lag(dinfl,19) + lag(dinfl,20) +
+                lag(dinfl,21) + lag(dinfl,22) + lag(dinfl,23) +
+                lag(unrate,12) + lag(unrate,13) + lag(unrate,14) +
+                lag(unrate,15) + lag(unrate,16) + lag(unrate,17) +
+                lag(unrate,18) + lag(unrate,19) + lag(unrate,20) +
+                lag(unrate,21) + lag(unrate,22) + lag(unrate,23)
+    ))
+report(m1)
+```
+<br/>
+
+
+```{r m234}
+fitAll <- train_data %>% 
+  model(
+    mUnrate = TSLM(dinfl12 ~ 1 +
+                lag(dinfl,12) + lag(dinfl,13) + lag(dinfl,14) +
+                lag(dinfl,15) + lag(dinfl,16) + lag(dinfl,17) +
+                lag(dinfl,18) + lag(dinfl,19) + lag(dinfl,20) +
+                lag(dinfl,21) + lag(dinfl,22) + lag(dinfl,23) +
+                lag(unrate,12) + lag(unrate,13) + lag(unrate,14) +
+                lag(unrate,15) + lag(unrate,16) + lag(unrate,17) +
+                lag(unrate,18) + lag(unrate,19) + lag(unrate,20) +
+                lag(unrate,21) + lag(unrate,22) + lag(unrate,23) 
+              ),
+    mHoust = TSLM(dinfl12 ~ 1 +
+                lag(dinfl,12) + lag(dinfl,13) + lag(dinfl,14) +
+                lag(dinfl,15) + lag(dinfl,16) + lag(dinfl,17) +
+                lag(dinfl,18) + lag(dinfl,19) + lag(dinfl,20) +
+                lag(dinfl,21) + lag(dinfl,22) + lag(dinfl,23) +
+                lag(houst,12) + lag(houst,13) + lag(houst,14) +
+                lag(houst,15) + lag(houst,16) + lag(houst,17) +
+                lag(houst,18) + lag(houst,19) + lag(houst,20) +
+                lag(houst,21) + lag(houst,22) + lag(houst,23)
+              ),
+    mExpinf = TSLM(dinfl12 ~ 1 +
+                lag(dinfl,12) + lag(dinfl,13) + lag(dinfl,14) +
+                lag(dinfl,15) + lag(dinfl,16) + lag(dinfl,17) +
+                lag(dinfl,18) + lag(dinfl,19) + lag(dinfl,20) +
+                lag(dinfl,21) + lag(dinfl,22) + lag(dinfl,23) +
+                lag(expinf1yr,12) + lag(expinf1yr,13) + lag(expinf1yr,14) +
+                lag(expinf1yr,15) + lag(expinf1yr,16) + lag(expinf1yr,17) +
+                lag(expinf1yr,18) + lag(expinf1yr,19) + lag(expinf1yr,20) +
+                lag(expinf1yr,21) + lag(expinf1yr,22) + lag(expinf1yr,23)
+              ),
+    mMich = TSLM(dinfl12 ~ 1 +
+                lag(dinfl,12) + lag(dinfl,13) + lag(dinfl,14) +
+                lag(dinfl,15) + lag(dinfl,16) + lag(dinfl,17) +
+                lag(dinfl,18) + lag(dinfl,19) + lag(dinfl,20) +
+                lag(dinfl,21) + lag(dinfl,22) + lag(dinfl,23) +
+                lag(mich,12) + lag(mich,13) + lag(mich,14) +
+                lag(mich,15) + lag(mich,16) + lag(mich,17) +
+                lag(mich,18) + lag(mich,19) + lag(mich,20) +
+                lag(mich,21) + lag(mich,22) + lag(mich,23)
+              ),
+    )
+tidy(fitAll)
+fitAccTrain <- accuracy(fitAll) %>% 
+  select(c(".model", ".type", "MAPE")) %>%
+  kable(format = "html", table.attr = "style='width:30%;' ") %>%     
+  kableExtra::kable_styling()
+fitAccTrain
+```
+
+<br/>
+
+The metric I will use to compare models is mean absolute percentage error (MAPE), with lowest values meaning best performing. The order of this table is expected; the Philips curve specification performs best, followed closely by housing starts and  the Federal Reserve Bank of Cleveland's expected inflation metric. The Michigan variable performed the worst likely due to the poor economic knowledge of the consumers who were surveyed.
+
+## Ensemble Model
+
+I will now create an ensemble model by averaging all previous models:
+
+$$mEnsemble = (mUnrate + mHoust + mExpinf + mMich)/4$$
+
+```{r ensesmble}
+fit_ensemble <- fitAll %>%
+  mutate(ensemble = (mUnrate + mHoust + mExpinf + mMich)/4) 
+fc_ensemble <- fit_ensemble %>% forecast(new_data = test_data)
+fc_ensemble %>% autoplot(filter(inflLag ,year(Month) > 2016), level = c(95))
+fit_ensemble <- accuracy(fit_ensemble) %>% 
+  select(c(".model", ".type", "MAPE")) %>%
+  kable(format = "html", table.attr = "style='width:30%;' ") %>%     
+  kableExtra::kable_styling()
+fc_ensemble <- accuracy(fc_ensemble, inflLag) %>% 
+  select(c(".model", ".type", "MAPE")) %>%
+  kable(format = "html", table.attr = "style='width:30%;' ") %>%     
+  kableExtra::kable_styling()
+
+fit_ensemble
+fc_ensemble
+```
+<br/>
+
+In the training data set, the ensemble model slightly beat out the 
+
+## Citations
+
+U.S. Bureau of Economic Analysis, Personal Consumption Expenditures: Chain-type Price Index [PCEPI], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/PCEPI, `r format(Sys.Date(), '%B %d, %Y')`.
+
+U.S. Bureau of Labor Statistics, Unemployment Rate [UNRATE], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/UNRATE, `r format(Sys.Date(), '%B %d, %Y')`.
+
+Federal Reserve Bank of Cleveland, 1-Year Expected Inflation [EXPINF1YR], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/EXPINF1YR, `r format(Sys.Date(), '%B %d, %Y')`.
+
+University of Michigan, University of Michigan: Inflation Expectation [MICH], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/MICH, `r format(Sys.Date(), '%B %d, %Y')`.
+
+U.S. Census Bureau and U.S. Department of Housing and Urban Development, New Privately-Owned Housing Units Started: Total Units [HOUST], retrieved from FRED, Federal Reserve Bank of St. Louis; https://fred.stlouisfed.org/series/HOUST, `r format(Sys.Date(), '%B %d, %Y')`.
+
+Coy, P. (2022, April 6). Ordinary people don't think like economists. it's a problem. The New York Times. Retrieved `r format(Sys.Date(), '%B %d, %Y')`, from https://www.nytimes.com/2022/04/06/opinion/economics-public-opinion.html 
