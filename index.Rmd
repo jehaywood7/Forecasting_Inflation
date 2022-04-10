@@ -27,9 +27,13 @@ In this paper, I will be creating several forecasts for inflation and comparing 
 
 The models will be tested against the Philips curve specification; a model developed in 1958 which explains the inverse relationship between the unemployment rate and inflation. My "challenge" is to create a model which predicts inflation better than a model using the unemployment rate alone.
 
+This project can also be found on my GitHub page: https://jehaywood7.github.io/
+
 <br/>
 
 ## Required R Libraries
+
+If you want to reproduce these results these are the required packages.
 
 ```{r loadLibraries, message = FALSE, warning= FALSE}
 require(tidyverse)
@@ -49,9 +53,9 @@ require(fpp3)
 
 For creating the forecasts, I used monthly data obtained from the Federal Reserve Economic Data (FRED) from January 1982 up to December 2018. The models will then be tested over data from January 2019 to the most recent observation.
 
-**Variables:**
-
 <br/>
+
+**Variables:**
 
 <dl>
   <dt>PCEPI</dt>
@@ -86,9 +90,9 @@ infl <- tq_get(VarList, get = "economic.data", from = "1982-01-01") %>%
 
 inflLag <- inflw %>% select(c(PCEPI, HOUST, UNRATE, EXPINF1YR, MICH)) %>%
   mutate(infl = 1200*log(PCEPI/lag(PCEPI))) %>% 
-  mutate(dinfl = infl - lag(infl,1)) %>% 
+  mutate(dinfl = infl - lag(infl,1)) %>%
   mutate(dinfl12 = 100*log(PCEPI/lag(PCEPI,12)) - lag(infl,12)) %>% 
-  mutate(unrate = UNRATE - lag(UNRATE)) %>% 
+  mutate(unrate = UNRATE - lag(UNRATE)) %>%
   mutate(houst = 100*log(HOUST/lag(HOUST))) %>%
   mutate(expinf1yr = EXPINF1YR - lag(EXPINF1YR)) %>%
   mutate(mich = MICH - lag(MICH)) %>%
@@ -107,14 +111,12 @@ ggplot(inflLagm, aes(Month, value)) +
 ```
 
 
-## Modelling
-
-<br/>
+## Modeling
 
 The specification for the Philips curve is:
 
 $$\pi^{12}_t - \pi_{t-12} = \phi + \beta(B)\Delta \pi_{t-12} + \gamma(B) u_{t-12} + \varepsilon_t$$
-so I will estimate a model with 12 lags on unemployment rate and inflation.
+This uses 12 lags so I will estimate a model with 12 lags on unemployment rate and inflation.
 
 ```{r m1, include = FALSE}
 m1 <- train_data %>% model(
@@ -187,9 +189,9 @@ fitAccTrain
 
 <br/>
 
-The metric I will use to compare models is mean absolute percentage error (MAPE), with lowest values meaning best performing. The order of this table is expected; the Philips curve specification performs best, followed closely by housing starts and  the Federal Reserve Bank of Cleveland's expected inflation metric. The Michigan variable performed the worst likely due to the poor economic knowledge of the consumers who were surveyed.
+The metric I will use to compare models is mean absolute percentage error (MAPE), with lowest values meaning best performing. The order of this table is expected; the Philips curve specification performs best, followed closely by housing starts and the Federal Reserve Bank of Cleveland's expected inflation metric. The Michigan variable performed the worst likely due to the poor economic knowledge of the consumers who were surveyed. However, this is showing in sample accuracy, in the next step we will be checking how the models perform out of sample.
 
-## Ensemble Model
+## Ensemble Model and Forecasting
 
 I will now create an ensemble model by averaging all previous models:
 
@@ -200,21 +202,51 @@ fit_ensemble <- fitAll %>%
   mutate(ensemble = (mUnrate + mHoust + mExpinf + mMich)/4) 
 fc_ensemble <- fit_ensemble %>% forecast(new_data = test_data)
 fc_ensemble %>% autoplot(filter(inflLag ,year(Month) > 2016), level = c(95))
-fit_ensemble <- accuracy(fit_ensemble) %>% 
+fit_ensemble1 <- accuracy(fit_ensemble) %>% 
   select(c(".model", ".type", "MAPE")) %>%
   kable(format = "html", table.attr = "style='width:30%;' ") %>%     
   kableExtra::kable_styling()
-fc_ensemble <- accuracy(fc_ensemble, inflLag) %>% 
+fc_ensemble1 <- accuracy(fc_ensemble, inflLag) %>% 
   select(c(".model", ".type", "MAPE")) %>%
   kable(format = "html", table.attr = "style='width:30%;' ") %>%     
   kableExtra::kable_styling()
-
-fit_ensemble
-fc_ensemble
 ```
+
+This plot shows that our models actually performed quite well up until early 2021. This is likely due to a delayed spike in inflation caused by COVID-19; included in that was the stimulus package, which increased consumer spending rapidly.
+
 <br/>
 
-In the training data set, the ensemble model slightly beat out the 
+
+
+In the training data set (from first 01/1982 to 12/2018), the ensemble model slightly beat out the Philips curve specification based on MAPE. As expected the University of Michigan model performed the worst.
+
+`r fit_ensemble1`
+
+In the test data set(from first 01/2019 to today), the model using the Federal Reserve Bank of Cleveland's expected inflation metric outperformed all models. Interestingly, the Philips curve specification performed the worst. For forecasting, the MAPE results from the training data set are less important than the test data set as we would expect all of these models to work well in sample. This is very noticeable here as the MAPEs from the training are rather close together, and the test data set the best far out performed the worst.
+
+`r fc_ensemble1`
+
+## Conclusion
+
+While the goal of forecasting is to give an idea of what the future could be, the presence of COVID makes forecasting anything beyond January 2020 very difficult. Even so, the model I expected to perform best at predicting future inflation, EXPINF1YR worked reasonably well out of sample. This variable uses a variety of factors to forecast inflation. From clevelandfed.org:
+
+<ul>
+	<li>Blue Chip forecast of CPI</li>
+	<li>Inflation swap data</li>
+	<li>CPI numbers for the current month</li>
+	<li>CPI data from vintage FRED</li>
+	<li>1-month to 6-month treasury bill yield at constant maturity</li>
+	<li>1-year to 15-year US treasury yield: continuously compounded zero-coupon</li>
+	<li>Survey of Professional Forecasters median year-over-year CPI inflation rate for the next 10 years</li>
+</ul>
+
+The Federal Reserve Bank of Cleveland chose the variables to model inflation, so it is no surprise that it is a strong predictor.
+
+The ensemble model performed very well in and out of sample which is expected as it is an average of our other models and therefore controls for more variables. If I were to estimate this again, I would want to test to determine which models contribute the most to the forecasts. I believe the EXPINF1YR model should have a stronger weight and that would improve the ensemble.
+
+
+<p style="page-break-after: always;">&nbsp;</p>
+<p style="page-break-before: always;">&nbsp;</p>
 
 ## Citations
 
