@@ -1963,13 +1963,12 @@ Forecasting</a></li>
 </ul>
 </div>
 
-<p><br /><br /></p>
+<p><br /></p>
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
 <p>In this paper, I will be creating several forecasts for inflation and
 comparing them to see which variables are the best predictors. I have
 included my code so that my results can be replicated and tested.</p>
-<p><br /></p>
 <p>The models will be tested against the Philips curve specification; a
 model developed in 1958 which explains the inverse relationship between
 the unemployment rate and inflation. My “challenge” is to create a model
@@ -1991,7 +1990,6 @@ require(tsibble)
 require(ggplot2)
 require(reshape2)
 require(fpp3)</code></pre>
-<p><br /></p>
 </div>
 <div id="data-and-expectations" class="section level2">
 <h2>Data and Expectations</h2>
@@ -2106,8 +2104,9 @@ test_data &lt;- inflLag %&gt;% filter_index(&quot;2019-01&quot; ~ .)</code></pre
 <p>The specification for the Philips curve is:</p>
 <p><span class="math display">\[\pi^{12}_t - \pi_{t-12} = \phi +
 \beta(B)\Delta \pi_{t-12} + \gamma(B) u_{t-12} + \varepsilon_t\]</span>
-This uses 12 lags so I will estimate a model with 12 lags on
-unemployment rate and inflation.</p>
+This uses 12 lags so when my model estimation will use this as well.
+Below I modeled the Philips curve as well as my other comparison
+models.</p>
 <p><br /></p>
 <pre class="r"><code>fitAll &lt;- train_data %&gt;% 
   model(

@@ -112,7 +112,7 @@ ggplot(inflLagm, aes(Month, value)) +
 The specification for the Philips curve is:
 
 $$\pi^{12}_t - \pi_{t-12} = \phi + \beta(B)\Delta \pi_{t-12} + \gamma(B) u_{t-12} + \varepsilon_t$$
-This uses 12 lags so I will estimate a model with 12 lags on unemployment rate and inflation.
+This uses 12 lags so when my model estimation will use this as well. Below I modeled the Philips curve as well as my other comparison models.
 
 ```{r m1, include = FALSE}
 m1 <- train_data %>% model(
